@@ -50,6 +50,18 @@ struct ChatMenuView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                // Quit button - top right
+                HStack {
+                    Spacer()
+                    Button(action: quitApp) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.bottom, 4)
+                
                 // API Key
                 VStack(alignment: .leading, spacing: 4) {
                     Text("OpenAI API Key")
@@ -242,6 +254,10 @@ struct ChatMenuView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             copiedToClipboard = false
         }
+    }
+    
+    private func quitApp() {
+        NSApplication.shared.terminate(nil)
     }
 }
 
