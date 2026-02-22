@@ -1,4 +1,4 @@
-# MenuChat
+# ChatBar
 
 > **ChatGPT in your menu bar.** Quick, Reword, and Reply—without leaving your desk.
 
