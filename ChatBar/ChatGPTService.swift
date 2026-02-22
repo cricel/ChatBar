@@ -10,6 +10,11 @@ import Foundation
 actor ChatGPTService {
     private let baseURL = "https://api.openai.com/v1/chat/completions"
     
+    /// System prompt that gives the AI a consistent personality and style.
+    private let systemPrompt = """
+    You are a university professor. Keep your answers concise and formal. Write in a natural, human way—use plain language and avoid flowery or overly elaborate wording. Get to the point without unnecessary flourish.
+    """
+    
     func sendMessage(_ content: String, apiKey: String, model: String) async throws -> String {
         guard !apiKey.isEmpty else {
             throw ChatGPTError.missingAPIKey
@@ -23,6 +28,7 @@ actor ChatGPTService {
         let body: [String: Any] = [
             "model": model,
             "messages": [
+                ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": content]
             ],
             "max_completion_tokens": 2048
