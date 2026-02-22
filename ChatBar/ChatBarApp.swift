@@ -1,6 +1,6 @@
 //
-//  MenuChatApp.swift
-//  MenuChat
+//  ChatBarApp.swift
+//  ChatBar
 //
 //  Created by cricel on 2/21/26.
 //
@@ -8,9 +8,9 @@
 import SwiftUI
 
 @main
-struct MenuChatApp: App {
+struct ChatBarApp: App {
     var body: some Scene {
-        MenuBarExtra("MenuChat", systemImage: "square.stack.3d.down.right.fill") {
+        MenuBarExtra("ChatBar", systemImage: "square.stack.3d.down.right.fill") {
             ChatMenuView()
         }
         .menuBarExtraStyle(.window)

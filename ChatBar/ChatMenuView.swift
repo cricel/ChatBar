@@ -1,6 +1,6 @@
 //
 //  ChatMenuView.swift
-//  MenuChat
+//  ChatBar
 //
 //  Created by cricel on 2/21/26.
 //
