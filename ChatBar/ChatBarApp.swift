@@ -10,7 +10,7 @@ import SwiftUI
 @main
 struct ChatBarApp: App {
     var body: some Scene {
-        MenuBarExtra("ChatBar", systemImage: "square.stack.3d.down.right.fill") {
+        MenuBarExtra("ChatBar", systemImage: "bubble.left.and.bubble.right.fill") {
             ChatMenuView()
         }
         .menuBarExtraStyle(.window)

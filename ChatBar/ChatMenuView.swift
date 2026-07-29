@@ -8,10 +8,28 @@
 import SwiftUI
 import AppKit
 
-enum PromptMode: String, CaseIterable {
+enum PromptMode: String, CaseIterable, Identifiable {
     case quick = "Quick"
     case reword = "Reword"
     case reply = "Reply"
+    
+    var id: String { rawValue }
+    
+    var symbolName: String {
+        switch self {
+        case .quick: return "sparkles"
+        case .reword: return "arrow.triangle.2.circlepath"
+        case .reply: return "arrowshape.turn.up.left.fill"
+        }
+    }
+    
+    var placeholder: String {
+        switch self {
+        case .quick: return "Ask anything…"
+        case .reword: return "Paste text to reword…"
+        case .reply: return "Your main idea for the reply…"
+        }
+    }
 }
 
 enum ChatGPTModel: String, CaseIterable, Identifiable {
@@ -29,6 +47,8 @@ enum ChatGPTModel: String, CaseIterable, Identifiable {
 }
 
 struct ChatMenuView: View {
+    @Environment(\.dismiss) private var dismiss
+    
     @State private var selectedMode: PromptMode = .quick
     @State private var quickInput: String = ""
     @State private var rewordInput: String = ""
@@ -40,6 +60,9 @@ struct ChatMenuView: View {
     @State private var isLoading: Bool = false
     @State private var errorMessage: String?
     @State private var copiedToClipboard: Bool = false
+    @State private var showSettings: Bool = false
+    @State private var streamTask: Task<Void, Never>?
+    @Namespace private var glassNamespace
     
     private let chatGPTService = ChatGPTService()
     
@@ -48,146 +71,305 @@ struct ChatMenuView: View {
     }
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                // Quit button - top right
-                HStack {
-                    Spacer()
-                    Button(action: quitApp) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.bottom, 4)
-                
-                // API Key
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("OpenAI API Key")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    SecureField("sk-...", text: $apiKey)
-                        .textFieldStyle(.roundedBorder)
-                }
-                
-                // Model selector
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Model")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Picker("Model", selection: $selectedModelRaw) {
-                        ForEach(ChatGPTModel.allCases) { model in
-                            Text(model.displayName).tag(model.rawValue)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                }
-                
-                Divider()
-                
-                // Mode selector
-                Picker("Mode", selection: $selectedMode) {
-                    ForEach(PromptMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
+        VStack(spacing: 0) {
+            header
             
-            // Input area based on mode
-            switch selectedMode {
-            case .quick:
-                quickInputView
-            case .reword:
-                rewordInputView
-            case .reply:
-                replyInputView
-            }
-            
-            // Send button
-            Button(action: sendToChatGPT) {
-                HStack {
-                    if isLoading {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                        Text("Sending...")
-                    } else {
-                        Image(systemName: "paperplane.fill")
-                        Text("Send to ChatGPT")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if showSettings {
+                        settingsPanel
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                    
+                    modePicker
+                    
+                    inputArea
+                        .animation(.snappy(duration: 0.25), value: selectedMode)
+                    
+                    sendButton
+                    
+                    if let error = errorMessage {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .labelStyle(.titleAndIcon)
+                    }
+                    
+                    if isLoading || !response.isEmpty {
+                        responsePanel
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(isLoading || !canSend || apiKey.isEmpty)
-            
-            if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-            
-            // Response area
-            if !response.isEmpty {
-                Divider()
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Response")
-                            .font(.headline)
-                        Spacer()
-                        Button(action: copyResponse) {
-                            Image(systemName: copiedToClipboard ? "checkmark.circle.fill" : "doc.on.doc")
-                                .foregroundStyle(copiedToClipboard ? .green : .accentColor)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    ScrollView {
-                        Text(response)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 200)
-                }
-            }
+                .padding(16)
+                .animation(.snappy(duration: 0.28), value: showSettings)
+                .animation(.snappy(duration: 0.28), value: isLoading && response.isEmpty)
             }
         }
-        .padding(16)
-        .frame(width: 420, height: 520)
+        .frame(width: 400, height: 540)
         .onAppear {
             NSApp.activate(ignoringOtherApps: true)
+            if apiKey.isEmpty {
+                showSettings = true
+            }
         }
     }
     
-    private var quickInputView: some View {
-        inputSection(label: "Ask anything", text: $quickInput, height: 80)
+    // MARK: - Header
+    
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.secondary)
+            
+            Text("ChatBar")
+                .font(.headline)
+            
+            Spacer(minLength: 0)
+            
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 6) {
+                    Button {
+                        withAnimation(.snappy(duration: 0.28)) {
+                            showSettings.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .foregroundStyle(showSettings || apiKey.isEmpty ? Color.accentColor : Color.primary)
+                    .help("Settings")
+                    .glassEffectID("settings", in: glassNamespace)
+                    
+                    Button(action: collapsePanel) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .help("Close")
+                    .glassEffectID("close", in: glassNamespace)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
-
-    private var rewordInputView: some View {
-        inputSection(label: "Text to reword", text: $rewordInput, height: 80)
+    
+    // MARK: - Settings
+    
+    private var settingsPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("API Key")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                SecureField("sk-…", text: $apiKey)
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(fieldBackground)
+            }
+            
+            HStack {
+                Text("Model")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Picker("Model", selection: $selectedModelRaw) {
+                    ForEach(ChatGPTModel.allCases) { model in
+                        Text(model.displayName).tag(model.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .controlSize(.small)
+            }
+            
+            Divider()
+            
+            Button(role: .destructive, action: quitApp) {
+                Label("Quit ChatBar", systemImage: "power")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glass)
+            .tint(.red)
+            .controlSize(.regular)
+        }
+        .padding(14)
+        .background(panelBackground)
     }
-
-    private var replyInputView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            inputSection(label: "Content to reply to (paste here)", text: $replyPastContent, height: 100)
-            inputSection(label: "Your main idea for the reply", text: $replyMainIdea, height: 80)
+    
+    // MARK: - Mode
+    
+    private var modePicker: some View {
+        GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 8) {
+                ForEach(PromptMode.allCases) { mode in
+                    modeButton(mode)
+                }
+            }
         }
     }
-
-    private func inputSection(label: String, text: Binding<String>, height: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    
+    @ViewBuilder
+    private func modeButton(_ mode: PromptMode) -> some View {
+        let isSelected = selectedMode == mode
+        Button {
+            withAnimation(.snappy(duration: 0.25)) {
+                selectedMode = mode
+            }
+        } label: {
+            Label(mode.rawValue, systemImage: mode.symbolName)
+                .font(.subheadline.weight(.medium))
+                .labelStyle(.titleAndIcon)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+        }
+        .applyModeButtonStyle(isSelected: isSelected)
+        .glassEffectID(mode.id, in: glassNamespace)
+    }
+    
+    // MARK: - Input
+    
+    @ViewBuilder
+    private var inputArea: some View {
+        switch selectedMode {
+        case .quick:
+            inputField(placeholder: PromptMode.quick.placeholder, text: $quickInput, height: 96)
+        case .reword:
+            inputField(placeholder: PromptMode.reword.placeholder, text: $rewordInput, height: 96)
+        case .reply:
+            VStack(alignment: .leading, spacing: 10) {
+                inputField(placeholder: "Paste the message you’re replying to…", text: $replyPastContent, height: 110)
+                inputField(placeholder: PromptMode.reply.placeholder, text: $replyMainIdea, height: 72)
+            }
+        }
+    }
+    
+    private func inputField(placeholder: String, text: Binding<String>, height: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            if text.wrappedValue.isEmpty {
+                Text(placeholder)
+                    .font(.body)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .allowsHitTesting(false)
+            }
+            
             TextEditor(text: text)
                 .font(.body)
-                .frame(height: height)
                 .scrollContentBackground(.hidden)
-                .padding(8)
-                .background(Color(nsColor: .textBackgroundColor))
-                .cornerRadius(8)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
         }
+        .frame(height: height)
+        .background(fieldBackground)
     }
+    
+    // MARK: - Send
+    
+    private var sendButton: some View {
+        Button(action: isLoading ? cancelStream : sendToChatGPT) {
+            HStack(spacing: 8) {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Stop")
+                } else {
+                    Image(systemName: "paperplane.fill")
+                    Text("Send")
+                }
+            }
+            .font(.body.weight(.semibold))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.glassProminent)
+        .controlSize(.large)
+        .disabled((!isLoading && !canSend) || apiKey.isEmpty)
+        .opacity(((!isLoading && !canSend) || apiKey.isEmpty) ? 0.55 : 1)
+    }
+    
+    // MARK: - Response
+    
+    private var responsePanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Response")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                
+                Spacer()
+                
+                if isLoading {
+                    Text("Streaming…")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                
+                Button(action: copyResponse) {
+                    Label(
+                        copiedToClipboard ? "Copied" : "Copy",
+                        systemImage: copiedToClipboard ? "checkmark" : "doc.on.doc"
+                    )
+                    .font(.caption.weight(.medium))
+                    .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.glass)
+                .controlSize(.small)
+                .disabled(response.isEmpty)
+                .foregroundStyle(copiedToClipboard ? Color.green : Color.primary)
+            }
+            
+            ScrollView {
+                Group {
+                    if response.isEmpty && isLoading {
+                        Text("…")
+                            .font(.body)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Text(response)
+                            .font(.body)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .frame(minHeight: 80, maxHeight: 180)
+        }
+        .padding(14)
+        .background(panelBackground)
+    }
+    
+    // MARK: - Surfaces
+    
+    private var fieldBackground: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(Color(nsColor: .textBackgroundColor).opacity(0.85))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+    }
+    
+    private var panelBackground: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.primary.opacity(0.04))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+    }
+    
+    // MARK: - Logic
     
     private var canSend: Bool {
         switch selectedMode {
@@ -225,35 +407,94 @@ struct ChatMenuView: View {
     private func sendToChatGPT() {
         guard canSend else { return }
         
+        streamTask?.cancel()
         errorMessage = nil
         isLoading = true
         response = ""
         
         let prompt = buildPrompt()
+        let key = apiKey
+        let model = selectedModel.rawValue
         
-        Task {
+        streamTask = Task {
+            var receivedAnyToken = false
+            
             do {
-                let result = try await chatGPTService.sendMessage(prompt, apiKey: apiKey, model: selectedModel.rawValue)
+                let stream = await chatGPTService.streamMessage(prompt, apiKey: key, model: model)
+                for try await token in stream {
+                    try Task.checkCancellation()
+                    await MainActor.run {
+                        if !receivedAnyToken {
+                            withAnimation(.snappy(duration: 0.28)) {
+                                response = token
+                            }
+                        } else {
+                            response += token
+                        }
+                        receivedAnyToken = true
+                    }
+                }
                 await MainActor.run {
-                    response = result
+                    isLoading = false
+                    if response.isEmpty {
+                        errorMessage = "No response from ChatGPT"
+                    } else {
+                        response = response.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    isLoading = false
+                }
+            } catch let urlError as URLError where urlError.code == .cancelled {
+                await MainActor.run {
                     isLoading = false
                 }
             } catch {
                 await MainActor.run {
-                    errorMessage = error.localizedDescription
+                    if !Task.isCancelled {
+                        errorMessage = error.localizedDescription
+                    }
                     isLoading = false
                 }
             }
         }
     }
     
+    private func cancelStream() {
+        streamTask?.cancel()
+        streamTask = nil
+        isLoading = false
+    }
+    
     private func copyResponse() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(response, forType: .string)
-        copiedToClipboard = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            copiedToClipboard = false
+        withAnimation(.snappy(duration: 0.2)) {
+            copiedToClipboard = true
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation(.snappy(duration: 0.2)) {
+                copiedToClipboard = false
+            }
+        }
+    }
+    
+    private func collapsePanel() {
+        // Prefer SwiftUI dismiss when supported.
+        dismiss()
+        
+        // MenuBarExtra (.window) often ignores dismiss — hide the panel without quitting.
+        for window in NSApp.windows where window.isVisible {
+            // Keep the status-bar item window; close the popover/panel content.
+            if window.className.contains("NSStatusBarWindow") {
+                continue
+            }
+            window.orderOut(nil)
+        }
+        
+        // Drop key status so the menu-bar item un-highlights.
+        NSApp.deactivate()
     }
     
     private func quitApp() {
@@ -261,7 +502,21 @@ struct ChatMenuView: View {
     }
 }
 
+private extension View {
+    @ViewBuilder
+    func applyModeButtonStyle(isSelected: Bool) -> some View {
+        if isSelected {
+            self
+                .buttonStyle(.glassProminent)
+                .tint(.accentColor)
+        } else {
+            self
+                .buttonStyle(.glass)
+        }
+    }
+}
+
 #Preview {
     ChatMenuView()
-        .frame(width: 420, height: 520)
+        .frame(width: 400, height: 540)
 }

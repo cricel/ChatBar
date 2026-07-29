@@ -1,91 +1,83 @@
 # ChatBar
 
-> **ChatGPT in your menu bar.** Quick, Reword, and Reply—without leaving your desk.
+A native macOS menu bar app for quick access to OpenAI models—without opening a browser.
 
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://developer.apple.com/macos/)
-[![Swift](https://img.shields.io/badge/Swift-5.0-orange.svg)](https://swift.org)
-[![SwiftUI](https://img.shields.io/badge/SwiftUI-✓-blue.svg)](https://developer.apple.com/xcode/swiftui/)
-[![OpenAI API](https://img.shields.io/badge/OpenAI-GPT--5.2-green.svg)](https://platform.openai.com/)
-
-A native macOS menu bar app that lets you talk to **GPT-5.2** or **GPT-5 Mini** in one click. No browser, no tab switching—just type, pick a mode, and get a response.
+[![Swift](https://img.shields.io/badge/Swift-5.9+-orange.svg)](https://swift.org)
+[![SwiftUI](https://img.shields.io/badge/SwiftUI-macOS%2026-blue.svg)](https://developer.apple.com/xcode/swiftui/)
+[![OpenAI](https://img.shields.io/badge/OpenAI-Chat%20Completions-412991.svg)](https://platform.openai.com/)
 
 ---
 
-## ✨ Features
+## Overview
 
-| Mode | What it does |
-|------|----------------|
-| **Quick** | Send any message as-is. Free-form chat. |
-| **Reword** | Adds a `reword` prompt before your text so ChatGPT rewrites or polishes it. |
-| **Reply** | Two fields: paste the content you’re replying to, then your main idea. ChatGPT drafts the reply for you. |
+ChatBar lives in the menu bar and provides three focused workflows for drafting and refining text with GPT. Responses stream in real time. The panel uses macOS Liquid Glass controls and collapses back to the menu bar when closed—no Dock icon, no context switching.
 
-- Stays in the **menu bar** (no Dock icon)
-- **API key** and **model** (GPT-5.2 / GPT-5 Mini) saved in the app
-- **Copy response** to clipboard with one click
-- Built with **SwiftUI** and the **OpenAI Chat Completions API**
+## Features
 
----
+| Mode | Description |
+|------|-------------|
+| **Quick** | Free-form prompts sent as-is |
+| **Reword** | Rewrites or polishes pasted text |
+| **Reply** | Drafts a reply from source content plus your intent |
 
-## 📋 Requirements
+Additional capabilities:
 
-- **macOS** 14.0+ (Sonoma or later)
-- **Xcode** 15+ (or Swift 5.9+)
-- An **OpenAI API key** ([create one here](https://platform.openai.com/api-keys))
+- Streaming responses from the OpenAI Chat Completions API
+- Model selection: GPT-5.2 and GPT-5 Mini
+- Local API key storage via Settings
+- One-click copy of the response to the clipboard
+- Cancel in-flight requests with Stop
+- Menu bar–only presence (`LSUIElement`); Quit is available in Settings
 
----
+## Requirements
 
-## 🚀 Getting Started
+- macOS 26.2 or later
+- Xcode 26 or later
+- An [OpenAI API key](https://platform.openai.com/api-keys)
 
-### Build & Run
+## Getting Started
 
-1. Clone the repo:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/MenuChat.git
-   cd MenuChat
-   ```
-2. Open the project in Xcode:
-   ```bash
-   open MenuChat.xcodeproj
-   ```
-3. Select the **MenuChat** scheme and run (**⌘R**).
-4. Look for the **MenuChat** icon in the menu bar and click it.
+### Build and run
+
+```bash
+git clone https://github.com/cricel/ChatBar.git
+cd ChatBar
+open ChatBar.xcodeproj
+```
+
+Select the **ChatBar** scheme and run (**⌘R**). The ChatBar icon appears in the menu bar.
 
 ### First-time setup
 
 1. Click the menu bar icon to open the panel.
-2. Enter your **OpenAI API key** in the secure field (stored locally).
-3. Choose **GPT-5.2** or **GPT-5 Mini** from the model menu.
-4. Pick a mode (Quick / Reword / Reply), type your content, and hit **Send to ChatGPT**.
+2. Open **Settings** (gear) and enter your OpenAI API key.
+3. Choose **GPT-5.2** or **GPT-5 Mini**.
+4. Select a mode, enter your content, and press **Send**.
 
----
+The close (✕) control dismisses the panel. To fully exit, open Settings and choose **Quit ChatBar**.
 
-## 📁 Project Structure
+## Project Structure
 
 ```
-MenuChat/
-├── MenuChat/
-│   ├── MenuChatApp.swift      # App entry, MenuBarExtra
-│   ├── ChatMenuView.swift     # Main UI: modes, inputs, response
-│   ├── ChatGPTService.swift   # OpenAI API client
-│   └── MenuChat.entitlements   # Sandbox + network client
-├── MenuChat.xcodeproj/
+ChatBar/
+├── ChatBar/
+│   ├── ChatBarApp.swift       # App entry and MenuBarExtra
+│   ├── ChatMenuView.swift     # Panel UI, modes, streaming display
+│   ├── ChatGPTService.swift   # OpenAI streaming client
+│   ├── ChatBar.entitlements   # App Sandbox and network client
+│   ├── Info.plist
+│   └── Assets.xcassets
+├── ChatBar.xcodeproj/
 └── README.md
 ```
 
----
+## Privacy
 
-## 🔒 Privacy & Security
+- The API key is stored locally in UserDefaults (not Keychain).
+- Requests go directly to OpenAI; there is no intermediate server.
+- The app runs under App Sandbox with outgoing network access only.
 
-- Your **API key** is stored in the app’s UserDefaults (keychain-level storage is not used).
-- Requests go directly to **OpenAI**; no intermediate servers.
-- The app uses **App Sandbox** and only requests **outgoing network** access.
+## License
 
----
-
-## 📄 License
-
-This project is open source. Add your preferred license (e.g. MIT) and copyright notice here.
-
----
-
-**Made with SwiftUI for macOS.**
+License terms are not specified in this repository. Clarify licensing before redistributing.

@@ -19,7 +19,38 @@ actor ChatGPTService {
     Provide exactly one version your single best answer. Do not offer multiple options or alternatives for the user to choose from.
     """
     
-    func sendMessage(_ content: String, apiKey: String, model: String) async throws -> String {
+    /// Streams assistant tokens as they arrive from the OpenAI Chat Completions API.
+    func streamMessage(
+        _ content: String,
+        apiKey: String,
+        model: String
+    ) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await self.performStream(
+                        content: content,
+                        apiKey: apiKey,
+                        model: model,
+                        continuation: continuation
+                    )
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+    
+    private func performStream(
+        content: String,
+        apiKey: String,
+        model: String,
+        continuation: AsyncThrowingStream<String, Error>.Continuation
+    ) async throws {
         guard !apiKey.isEmpty else {
             throw ChatGPTError.missingAPIKey
         }
@@ -28,6 +59,7 @@ actor ChatGPTService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         
         let body: [String: Any] = [
             "model": model,
@@ -35,19 +67,24 @@ actor ChatGPTService {
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": content]
             ],
-            "max_completion_tokens": 2048
+            "max_completion_tokens": 2048,
+            "stream": true
         ]
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        let (data, urlResponse) = try await URLSession.shared.data(for: request)
+        let (bytes, urlResponse) = try await URLSession.shared.bytes(for: request)
         
         guard let httpResponse = urlResponse as? HTTPURLResponse else {
             throw ChatGPTError.invalidResponse
         }
         
         guard httpResponse.statusCode == 200 else {
-            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            var errorData = Data()
+            for try await byte in bytes {
+                errorData.append(byte)
+            }
+            if let errorJson = try? JSONSerialization.jsonObject(with: errorData) as? [String: Any],
                let error = errorJson["error"] as? [String: Any],
                let message = error["message"] as? String {
                 throw ChatGPTError.apiError(message)
@@ -55,15 +92,28 @@ actor ChatGPTService {
             throw ChatGPTError.apiError("HTTP \(httpResponse.statusCode)")
         }
         
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard let choices = json?["choices"] as? [[String: Any]],
-              let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String else {
-            throw ChatGPTError.invalidResponse
+        for try await line in bytes.lines {
+            try Task.checkCancellation()
+            
+            guard line.hasPrefix("data: ") else { continue }
+            let payload = String(line.dropFirst(6))
+            
+            if payload == "[DONE]" {
+                break
+            }
+            
+            guard let data = payload.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let choices = json["choices"] as? [[String: Any]],
+                  let first = choices.first,
+                  let delta = first["delta"] as? [String: Any],
+                  let token = delta["content"] as? String,
+                  !token.isEmpty else {
+                continue
+            }
+            
+            continuation.yield(token)
         }
-        
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
