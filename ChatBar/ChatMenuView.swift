@@ -33,15 +33,15 @@ enum PromptMode: String, CaseIterable, Identifiable {
 }
 
 enum ChatGPTModel: String, CaseIterable, Identifiable {
-    case gpt52 = "gpt-5.2"
-    case gpt5Mini = "gpt-5-mini"
+    case terra = "gpt-5.6-terra"
+    case luna = "gpt-5.6-luna"
     
     var id: String { rawValue }
     
     var displayName: String {
         switch self {
-        case .gpt52: return "GPT-5.2"
-        case .gpt5Mini: return "GPT-5 Mini"
+        case .terra: return "GPT-5.6 Terra"
+        case .luna: return "GPT-5.6 Luna"
         }
     }
 }
@@ -55,7 +55,7 @@ struct ChatMenuView: View {
     @State private var replyPastContent: String = ""
     @State private var replyMainIdea: String = ""
     @AppStorage("OpenAI_API_Key") private var apiKey: String = ""
-    @AppStorage("ChatGPT_Model") private var selectedModelRaw: String = ChatGPTModel.gpt5Mini.rawValue
+    @AppStorage("ChatGPT_Model") private var selectedModelRaw: String = ChatGPTModel.luna.rawValue
     @State private var response: String = ""
     @State private var isLoading: Bool = false
     @State private var errorMessage: String?
@@ -67,7 +67,7 @@ struct ChatMenuView: View {
     private let chatGPTService = ChatGPTService()
     
     private var selectedModel: ChatGPTModel {
-        ChatGPTModel(rawValue: selectedModelRaw) ?? .gpt5Mini
+        ChatGPTModel(rawValue: selectedModelRaw) ?? .luna
     }
     
     var body: some View {
@@ -388,19 +388,9 @@ struct ChatMenuView: View {
         case .quick:
             return quickInput
         case .reword:
-            return "reword\n\(rewordInput)"
+            return "Reword. Same meaning, similar length.\n\n\(rewordInput)"
         case .reply:
-            return """
-            Here is the content I need to reply to:
-            
-            \(replyPastContent)
-            
-            My main idea for the reply:
-            
-            \(replyMainIdea)
-            
-            Please help me write a reply based on the above.
-            """
+            return "Write a brief reply.\n\nTo:\n\(replyPastContent)\n\nIdea:\n\(replyMainIdea)"
         }
     }
     
